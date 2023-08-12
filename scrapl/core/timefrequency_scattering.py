@@ -109,7 +109,7 @@ def jtfs_singlepath(U_0, backend, filters, log2_stride, average_local,
 
 
 def jtfs_singlepath_average_and_format(path, backend, phi_f, log2_stride,
-        average, phi_fr_f, oversampling_fr, average_fr, out_type, format):
+        average, phi_fr_f, oversampling_fr, average_fr):
 
     # "The phase of the integrand must be set to a constant. This
     # freedom in setting the stationary phase to an arbitrary constant
@@ -140,13 +140,5 @@ def jtfs_singlepath_average_and_format(path, backend, phi_f, log2_stride,
         path = frequency_averaging(path, backend,
             phi_fr_f, oversampling_fr, average_fr)
 
-    # Frequential unpadding.
-    if not (out_type == 'array' and format == 'joint'):
-        path['coef'] = backend.unpad_frequency(
-            path['coef'], path['n1_max'], path['n1_stride'])
-
     # Splitting and reshaping
-    if format == 'joint':
-        yield {**path, 'order': len(path['n'])}
-    elif format == 'time':
-        yield from time_formatting(path, backend)
+    return {**path, 'order': len(path['n'])}

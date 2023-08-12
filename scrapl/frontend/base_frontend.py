@@ -3,6 +3,11 @@ from kymatio.scattering1d.frontend.base_frontend import TimeFrequencyScatteringB
 
 
 class TimeFrequencyScraplBase(TimeFrequencyScatteringBase):
+    def __init__(self, **kwargs):
+        kwargs['out_type'] = 'array'
+        kwargs['format'] = 'joint'
+        super(TimeFrequencyScraplBase, self).__init__(**kwargs)
+    
     def scattering_singlepath(self, x, n2, n_fr):
         TimeFrequencyScatteringBase._check_runtime_args(self)
         TimeFrequencyScatteringBase._check_input(self, x)
@@ -18,18 +23,18 @@ class TimeFrequencyScraplBase(TimeFrequencyScatteringBase):
             filters, self.log2_stride, (self.average=='local'),
             self.filters_fr, self.log2_stride_fr, (self.average_fr=='local'),
             n2, n_fr)
-        
+                
         path = jtfs_singlepath_average_and_format(path, self.backend,
             self.phi_f, self.log2_stride, self.average,
-            self.filters_fr[0], self.log2_stride_fr, self.average_fr,
-            self.out_type, self.format)
+            self.filters_fr[0], self.log2_stride_fr, self.average_fr)
 
         # Unpad.
-        res = max(path['j'][-1], 0)
-        path['coef'] = self.backend.unpad(
-            path['coef'], self.ind_start[res], self.ind_end[res])
+        if self.average != 'global':
+            res = max(path['j'][-1], 0)
+            path['coef'] = self.backend.unpad(
+                path['coef'], self.ind_start[res], self.ind_end[res])
 
-        # Reshape path to batch shape.
+        # # Reshape path to batch shape.
         path['coef'] = self.backend.reshape_output(path['coef'],
             batch_shape, n_kept_dims=(1 + (self.format=='joint')))
 
