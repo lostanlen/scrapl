@@ -1,9 +1,10 @@
 import numpy as np
+from kymatio.scattering1d.core.timefrequency_scattering import \
+    time_averaging, frequency_averaging, time_formatting
 
 
-def joint_timefrequency_scattering_singlepath(U_0, backend, filters,
-        log2_stride, average_local, filters_fr, log2_stride_fr,
-        average_local_fr, n2, n_fr):
+def jtfs_singlepath(U_0, backend, filters, log2_stride, average_local,
+        filters_fr, log2_stride_fr, average_local_fr, n2, n_fr):
     """
     Parameters
     ----------
@@ -34,10 +35,12 @@ def joint_timefrequency_scattering_singlepath(U_0, backend, filters,
 
     Yields
     ------
-    S2 : tensor
-        indexed by (batch, n1[log2_T], time[log2_F]), real-valued,
-        where n1 has been zero-padded to size N_fr before convolution
-        with psi_fr.
+    path : dict with fields
+        - 'coef': tensor indexed by (batch, n1[log2_T], time[log2_F]),
+        complex-valued, where n1 has been zero-padded to size N_fr
+        before convolution with psi_fr.
+        - n, j, n_fr, j_fr, spin, n1_max, n1_stride: integers
+        as in TimeFrequencyScattering
     """
     # compute the Fourier transform
     U_0_hat = backend.rfft(U_0)
@@ -100,9 +103,50 @@ def joint_timefrequency_scattering_singlepath(U_0, backend, filters,
     Y_fr_T = backend.ifft(Y_fr_sub)
     Y_fr = backend.swap_time_frequency(Y_fr_T)
 
-    # Modulus
-    U_2 = backend.modulus(Y_fr)
-
-    return {'coef': U_2, 'n': (n2, n_fr), 'j': (-1, j2),
+    return {'coef': Y_fr, 'n': (n2, n_fr), 'j': (-1, j2),
         'n_fr': (n_fr,), 'j_fr': (j_fr,), 'spin': spin,
         'n1_max': n1_max, 'n1_stride': (2**j_fr)}
+
+
+def jtfs_singlepath_average_and_format(path, backend, phi_f, log2_stride,
+        average, phi_fr_f, oversampling_fr, average_fr, out_type, format):
+
+    # "The phase of the integrand must be set to a constant. This
+    # freedom in setting the stationary phase to an arbitrary constant
+    # value suggests the existence of a gauge boson" — Glinsky
+    path['coef'] = backend.modulus(path['coef'])
+
+    # Temporal averaging. Switch cases:
+    # 1. If averaging is global, no need for unpadding at all.
+    # 2. If averaging is local, averaging depends on order:
+    #     2a. at order 1, U_gen yields
+    #               Y_1_fr = S_1 * psi_{n_fr}
+    #         no need for further averaging
+    #     2b. at order 2, U_gen yields
+    #               Y_2_fr = U_1 * psi_{n2} * psi_{n_fr}
+    #         average with phi
+    # (for simplicity, we assume oversampling=0 in the rationale above,
+    #  but the implementation below works for any value of oversampling)
+    if average == 'global':
+        # Case 1.
+        path['coef'] = backend.average_global(path['coef'])
+    elif average == 'local' and len(path['n']) > 1:
+        # Case 2b.
+        path = time_averaging(path, backend, phi_f, log2_stride)
+
+    # Frequential averaging. NB. if spin==0, U_gen is already averaged.
+    # Hence, we only average if spin!=0, i.e. psi_{n_fr} in path.
+    if average_fr and not path['spin'] == 0:
+        path = frequency_averaging(path, backend,
+            phi_fr_f, oversampling_fr, average_fr)
+
+    # Frequential unpadding.
+    if not (out_type == 'array' and format == 'joint'):
+        path['coef'] = backend.unpad_frequency(
+            path['coef'], path['n1_max'], path['n1_stride'])
+
+    # Splitting and reshaping
+    if format == 'joint':
+        yield {**path, 'order': len(path['n'])}
+    elif format == 'time':
+        yield from time_formatting(path, backend)

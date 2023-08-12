@@ -1,5 +1,4 @@
-from ..core.timefrequency_scattering import joint_timefrequency_scattering_singlepath
-from kymatio.scattering1d.core.timefrequency_scattering import jtfs_average_and_format
+from ..core.timefrequency_scattering import jtfs_singlepath, jtfs_singlepath_average_and_format
 from kymatio.scattering1d.frontend.base_frontend import TimeFrequencyScatteringBase
 
 
@@ -15,10 +14,15 @@ class TimeFrequencyScraplBase(TimeFrequencyScatteringBase):
             x, pad_left=self.pad_left, pad_right=self.pad_right)
 
         filters = [self.phi_f, self.psi1_f, self.psi2_f]
-        path = joint_timefrequency_scattering_singlepath(U_0, self.backend,
+        path = jtfs_singlepath(U_0, self.backend,
             filters, self.log2_stride, (self.average=='local'),
             self.filters_fr, self.log2_stride_fr, (self.average_fr=='local'),
             n2, n_fr)
+        
+        path = jtfs_singlepath_average_and_format(path, self.backend,
+            self.phi_f, self.log2_stride, self.average,
+            self.filters_fr[0], self.log2_stride_fr, self.average_fr,
+            self.out_type, self.format)
 
         # Unpad.
         res = max(path['j'][-1], 0)
